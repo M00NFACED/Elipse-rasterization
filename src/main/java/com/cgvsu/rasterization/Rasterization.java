@@ -4,12 +4,26 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.image.PixelWriter;
 import javafx.scene.paint.Color;
 
-import static java.lang.Math.abs;
 import static java.lang.Math.sqrt;
 
 public class Rasterization {
 
     //  Метод отрисовки эллипса
+    public static void drawFilledEllipseWithInterpolation
+    (GraphicsContext gc, Point centerPoint, int width, int height, Color centralColor, Color borderColor) {
+        PixelWriter pixelWriter = gc.getPixelWriter();
+        for (int x = centerPoint.getX() - width; x < centerPoint.getX() + width; x++) {
+            double localZeroY = Math.sqrt(height * height * (1 - ((x - centerPoint.getX()) * (x - centerPoint.getX()))
+                    / (width * width + 0.0)));
+            int startBorder = (int) (-localZeroY + centerPoint.getY() + 0.5);
+            int endBorder = (int) (localZeroY + centerPoint.getY() + 0.5);
+            for (int y = startBorder; y < endBorder; y++) {
+                pixelWriter.setColor(x, y, calcColor(centralColor, borderColor, new Point(x, y), centerPoint, findPointOnEllipse(new Point(x, y), centerPoint, width, height)));
+            }
+        }
+    }
+
+/*
     public static void drawEllipse(final GraphicsContext graphicsContext,
                                    final Point centralPoint,
                                    final int width,
@@ -48,37 +62,30 @@ public class Rasterization {
                                 height),
                         width));
     }
+*/
 
-
-    private static Color calcColor(Color centralColor, Color borderColor, Point currentPoint, Point centralPoint, Point borderPoint, int width) {
-        double cRed = toRGB(centralColor.getRed());
-        double cGreen = toRGB(centralColor.getGreen());
-        double cBlue = toRGB(centralColor.getBlue());
-        double bRed = toRGB(borderColor.getRed());
-        double bGreen = toRGB(borderColor.getGreen());
-        double bBlue = toRGB(borderColor.getBlue());
-        int newRed;
-        int newGreen;
-        int newBlue;
-        if (abs(currentPoint.getX() - centralPoint.getX()) > width / 4 || abs(currentPoint.getY() - centralPoint.getY()) < 1) {
-
-            newRed = (int) (cRed + (currentPoint.getX() - centralPoint.getX()) * (bRed - cRed) / (borderPoint.getX() - centralPoint.getX()) + 0.5);
-            newGreen = (int) (cGreen + (currentPoint.getX() - centralPoint.getX()) * (bGreen - cGreen) / (borderPoint.getX() - centralPoint.getX()) + 0.5);
-            newBlue = (int) (cBlue + (currentPoint.getX() - centralPoint.getX()) * (bBlue - cBlue) / (borderPoint.getX() - centralPoint.getX()) + 0.5);
-
-
-        } else {
-            newRed = (int) (cRed + (currentPoint.getY() - centralPoint.getY()) * (bRed - cRed) / (borderPoint.getY() - centralPoint.getY()) + 0.5);
-            newGreen = (int) (cGreen + (currentPoint.getY() - centralPoint.getY()) * (bGreen - cGreen) / (borderPoint.getY() - centralPoint.getY()) + 0.5);
-            newBlue = (int) (cBlue + (currentPoint.getY() - centralPoint.getY()) * (bBlue - cBlue) / (borderPoint.getY() - centralPoint.getY()) + 0.5);
-        }
-
-        return Color.rgb(newRed, newGreen, newBlue);
-
+    public static double distanceBetweenTwoPoints(Point point1, Point point2) {
+        return Math.sqrt((point1.getX() - point2.getX()) * (point1.getX() - point2.getX()) + (point1.getY() - point2.getY()) * (point1.getY() - point2.getY()));
     }
 
-    private static int toRGB(double c) {
-        return (int) (c * 186);
+    private static Color calcColor(Color centralColor, Color borderColor, Point currentPoint, Point centralPoint, Point borderPoint) {
+        double centralColorRed = centralColor.getRed();
+        double centralColorGreen = centralColor.getGreen();
+        double centralColorBlue = centralColor.getBlue();
+        double borderColorRed = borderColor.getRed();
+        double borderColorGreen = borderColor.getGreen();
+        double borderColorBlue = borderColor.getBlue();
+
+        double newColorRed = centralColorRed + distanceBetweenTwoPoints(centralPoint, currentPoint) / distanceBetweenTwoPoints(centralPoint, borderPoint) * (borderColorRed - centralColorRed);
+        double newColorGreen = centralColorGreen + distanceBetweenTwoPoints(centralPoint, currentPoint) / distanceBetweenTwoPoints(centralPoint, borderPoint) * (borderColorGreen - centralColorGreen);
+        double newColorBlue = centralColorBlue + distanceBetweenTwoPoints(centralPoint, currentPoint) / distanceBetweenTwoPoints(centralPoint, borderPoint) * (borderColorBlue - centralColorBlue);
+
+
+        if (newColorRed < 0 || newColorRed > 1 || newColorGreen < 0 || newColorGreen > 1 || newColorBlue < 0 || newColorBlue > 1) {
+            System.out.println("Test");
+        }
+        return new Color(newColorRed, newColorGreen, newColorBlue, 1.0);
+
     }
 
 //   Расчет взят отсюда: https://ip76.ru/theory-and-practice/inellipse-line/
@@ -90,10 +97,14 @@ public class Rasterization {
             double b = centralPoint.getY() - k * centralPoint.getX();
             double S = b - centralPoint.getY();
             double V = (double) width * width * height * height;
-            double A = height * height + width * width * k * k;
-            double B = 2 * (width * width * k * S - height * height * centralPoint.getX());
-            double C = (double) height * height * centralPoint.getX() * centralPoint.getX() + width * width * S * S - V;
-            double D = B * B - 4 * A * C;
+            double A;
+            A = height * height + width * width * k * k;
+            double B;
+            B = 2 * (width * width * k * S - height * height * centralPoint.getX());
+            double C;
+            C = (double) height * height * centralPoint.getX() * centralPoint.getX() + width * width * S * S - V;
+            double D;
+            D = B * B - 4 * A * C;
             double x1 = (-B + sqrt(D)) / (2 * A);
             double x2 = (-B - sqrt(D)) / (2 * A);
             double y1 = k * x1 + b;
@@ -111,10 +122,10 @@ public class Rasterization {
             double B = -2 * centralPoint.getY();
             double C = centralPoint.getY() * centralPoint.getY() - W;
             double D = B * B - 4 * A * C;
-            double y1 = (-B + sqrt(D)) / (2 * A);
-            double y2 = (-B - sqrt(D)) / (2 * A);
+            int y1 = (int) ((-B + sqrt(D)) / (2 * A)+0.5);
+            int y2 = (int) ((-B - sqrt(D)) / (2 * A)+0.5);
             crossingPoint.setX(currentPoint.getX());
-            if (sqrt((y1 - currentPoint.getY()) * (y1 - currentPoint.getY())) < (sqrt((y2 - currentPoint.getY()) * (y2 - currentPoint.getY())))) {
+            if (distanceBetweenTwoPoints(currentPoint, new Point(currentPoint.getX(),y1)) < (sqrt((y2 - currentPoint.getY()) * (y2 - currentPoint.getY())))) {
                 crossingPoint.setY((int) (y1 + 0.5));
             } else {
                 crossingPoint.setY((int) (y2 + 0.5));
